@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Apiera\Amqp;
 
 use Apiera\Amqp\Exception\InvalidMessageException;
+use Apiera\Amqp\Interface\MessageInterface;
 
 final readonly class MessageEnvelope
 {
@@ -16,7 +17,7 @@ final readonly class MessageEnvelope
      * @param array<string, mixed> $headers
      */
     public function __construct(
-        private Message $message,
+        private MessageInterface $message,
         private array $headers = [],
     ) {
     }
@@ -24,15 +25,23 @@ final readonly class MessageEnvelope
     /**
      * @throws InvalidMessageException
      */
-    public static function fromAMQPEnvelope(\AMQPEnvelope $envelope): self
+    public static function fromAMQPEnvelope(\AMQPEnvelope $envelope, MessageInterface $message): self
     {
         try {
-            $message = Message::fromJson($envelope->getBody());
+            $message = $message->jsonDenormalize($envelope->getBody());
             $headers = [];
 
             // Get headers from envelope
             foreach ($envelope->getHeaders() as $key => $value) {
                 $headers[$key] = $value;
+            }
+
+            if (!isset($headers[self::X_ORIGINAL_EXCHANGE])) {
+                $headers[self::X_ORIGINAL_EXCHANGE] = $envelope->getExchangeName();
+            }
+
+            if (!isset($headers[self::X_ORIGINAL_ROUTING_KEY])) {
+                $headers[self::X_ORIGINAL_ROUTING_KEY] = $envelope->getRoutingKey();
             }
 
             return new self($message, $headers);
@@ -41,7 +50,7 @@ final readonly class MessageEnvelope
         }
     }
 
-    public function getMessage(): Message
+    public function getMessage(): MessageInterface
     {
         return $this->message;
     }

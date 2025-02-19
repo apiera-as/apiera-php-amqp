@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Apiera\Amqp;
 
+use Apiera\Amqp\Interface\MessageInterface;
+
 final readonly class Publisher
 {
     /**
@@ -13,7 +15,7 @@ final readonly class Publisher
      * @throws \JsonException
      */
     public function publish(
-        Message $message,
+        MessageInterface $message,
         Exchange $exchange,
         string $routingKey = ''
     ): void {

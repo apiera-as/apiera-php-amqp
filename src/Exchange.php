@@ -61,7 +61,7 @@ final class Exchange
         ];
 
         $this->exchange->publish(
-            $messageEnvelope->getMessage()->toJson(),
+            $messageEnvelope->getMessage()->jsonNormalize(),
             $routingKey,
             AMQP_NOPARAM,
             $attributes

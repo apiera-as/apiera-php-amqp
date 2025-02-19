@@ -9,6 +9,7 @@ use Apiera\Amqp\Exception\RetryException;
 use Apiera\Amqp\Handler\NullFailureHandler;
 use Apiera\Amqp\Handler\NullRetryHandler;
 use Apiera\Amqp\Interface\FailureHandlerInterface;
+use Apiera\Amqp\Interface\MessageInterface;
 use Apiera\Amqp\Interface\RetryHandlerInterface;
 
 final readonly class Consumer
@@ -26,30 +27,61 @@ final readonly class Consumer
      * @throws \AMQPEnvelopeException
      * @throws \AMQPQueueException
      *
-     * @param callable(Message): void $callback
+     * @param callable(MessageInterface): void $callback
      */
-    public function consume(Queue $queue, callable $callback): void
+    public function consume(Queue $queue, MessageInterface $message, callable $callback): void
     {
         if (!$queue->isDeclared()) {
             $queue->declare();
         }
 
-        $queue->getQueue()->consume(function (\AMQPEnvelope $amqpEnvelope) use ($callback, $queue): void {
-            $envelope = MessageEnvelope::fromAMQPEnvelope($amqpEnvelope);
+        $queue->getQueue()->consume(
+            function (\AMQPEnvelope $amqpEnvelope) use ($callback, $queue, $message): void {
+                $envelope = MessageEnvelope::fromAMQPEnvelope($amqpEnvelope, $message);
 
-            $deliveryTag = $amqpEnvelope->getDeliveryTag();
+                $deliveryTag = $amqpEnvelope->getDeliveryTag();
 
-            if ($deliveryTag === null) {
-                throw new FailedException('Missing delivery tag in AMQP envelope');
-            }
+                if ($deliveryTag === null) {
+                    throw new FailedException('Missing delivery tag in AMQP envelope');
+                }
 
-            try {
-                $callback($envelope->getMessage());
-                $queue->getQueue()->ack($deliveryTag);
-            } catch (RetryException $exception) {
-                if ($envelope->getRetryCount() >= $exception->getMaxRetryCount()) {
+                try {
+                    $callback($envelope->getMessage());
+                    $queue->getQueue()->ack($deliveryTag);
+                } catch (RetryException $exception) {
+                    if ($envelope->getRetryCount() >= $exception->getMaxRetryCount()) {
+                        $failedException = new FailedException(
+                            'Maximum retry attempts exceeded',
+                            context: $exception->getContext(),
+                            previous: $exception
+                        );
+
+                        $this->failureHandler->failure(
+                            envelope: $envelope,
+                            exception: $failedException,
+                            channel: $this->channel
+                        );
+                        $queue->getQueue()->ack($deliveryTag);
+
+                        return;
+                    }
+
+                    $this->retryHandler->retry(
+                        envelope: $envelope,
+                        exception: $exception,
+                        channel: $this->channel
+                    );
+                    $queue->getQueue()->ack($deliveryTag);
+                } catch (FailedException $exception) {
+                    $this->failureHandler->failure(
+                        envelope: $envelope,
+                        exception: $exception,
+                        channel: $this->channel
+                    );
+                    $queue->getQueue()->ack($deliveryTag);
+                } catch (\Throwable $exception) {
                     $failedException = new FailedException(
-                        'Maximum retry attempts exceeded',
+                        'Message processing failed',
                         previous: $exception
                     );
 
@@ -59,28 +91,8 @@ final readonly class Consumer
                         channel: $this->channel
                     );
                     $queue->getQueue()->ack($deliveryTag);
-
-                    return;
                 }
-
-                $this->retryHandler->retry(
-                    envelope: $envelope,
-                    exception: $exception,
-                    channel: $this->channel
-                );
-                $queue->getQueue()->ack($deliveryTag);
-            } catch (FailedException $exception) {
-                $this->failureHandler->failure(
-                    envelope: $envelope,
-                    exception: $exception,
-                    channel: $this->channel
-                );
-                $queue->getQueue()->ack($deliveryTag);
-            } catch (\Throwable $exception) {
-                $queue->getQueue()->nack($deliveryTag);
-
-                throw new FailedException('Message processing failed', previous: $exception);
             }
-        });
+        );
     }
 }
