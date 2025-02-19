@@ -2,13 +2,24 @@
 
 declare(strict_types=1);
 
-namespace Apiera\Amqp;
+namespace Apiera\Amqp\Handler;
 
+use Apiera\Amqp\Channel;
 use Apiera\Amqp\Enum\ExchangeTypeEnum;
 use Apiera\Amqp\Exception\RetryException;
+use Apiera\Amqp\Exchange;
+use Apiera\Amqp\Interface\RetryHandlerInterface;
+use Apiera\Amqp\MessageEnvelope;
+use Apiera\Amqp\Queue;
 
-final readonly class RetryHandler
+final readonly class DeadLetterRetryHandler implements RetryHandlerInterface
 {
+    public function __construct(
+        private ?Exchange $retryExchange = null,
+        private ?Queue $retryQueue = null,
+    ) {
+    }
+
     /**
      * @throws \AMQPQueueException
      * @throws \AMQPExchangeException
@@ -16,42 +27,35 @@ final readonly class RetryHandler
      * @throws \JsonException
      * @throws \AMQPChannelException
      */
-    public function retry(
-        MessageEnvelope $envelope,
-        RetryException $exception,
-        Channel $channel,
-        string $originalExchange,
-        string $originalRoutingKey
-    ): void {
+    public function retry(MessageEnvelope $envelope, RetryException $exception, Channel $channel): void
+    {
         $delay = $this->calculateDelay($exception->getRetryAfter());
-        $retryQueueName = sprintf('retry_%d', $delay);
 
-        // Setup retry exchange
-        $retryExchange = new Exchange(
+        $retryExchange = $this->retryExchange ?? new Exchange(
             channel: $channel,
             type: ExchangeTypeEnum::DIRECT,
             name: 'retry',
             flags: []
         );
-        $retryExchange->declare();
 
-        // Setup retry queue with dead letter exchange
-        $retryQueue = new Queue(
+        $retryQueueName = sprintf('retry_%d', $delay);
+
+        $retryQueue = $this->retryQueue ?? new Queue(
             channel: $channel,
             name: $retryQueueName,
             flags: [],
             arguments: [
-                'x-dead-letter-exchange' => $originalExchange,
-                'x-dead-letter-routing-key' => $originalRoutingKey,
+                'x-dead-letter-exchange' => $envelope->getOriginalExchange(),
+                'x-dead-letter-routing-key' => $envelope->getOriginalRoutingKey(),
                 'x-message-ttl' => $delay,
                 'x-queue-mode' => 'lazy',
             ]
         );
 
+        $retryExchange->declare();
         $retryQueue->declare();
         $retryQueue->bind($retryExchange, $retryQueueName);
 
-        // Create updated envelope with retry metadata and error information
         $retryEnvelope = new MessageEnvelope(
             $envelope->getMessage(),
             [
@@ -61,8 +65,8 @@ final readonly class RetryHandler
                 'x-error-class' => $exception::class,
                 'x-error-time' => (new \DateTime())->format('c'),
                 'x-error-context' => json_encode($exception->getContext()),
-                'x-original-exchange' => $originalExchange,
-                'x-original-routing-key' => $originalRoutingKey,
+                'x-dead-letter-exchange' => $envelope->getOriginalExchange(),
+                'x-dead-letter-routing-key' => $envelope->getOriginalRoutingKey(),
             ]
         );
 

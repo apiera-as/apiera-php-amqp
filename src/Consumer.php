@@ -6,13 +6,17 @@ namespace Apiera\Amqp;
 
 use Apiera\Amqp\Exception\FailedException;
 use Apiera\Amqp\Exception\RetryException;
+use Apiera\Amqp\Handler\NullFailureHandler;
+use Apiera\Amqp\Handler\NullRetryHandler;
+use Apiera\Amqp\Interface\FailureHandlerInterface;
+use Apiera\Amqp\Interface\RetryHandlerInterface;
 
 final readonly class Consumer
 {
     public function __construct(
         private Channel $channel,
-        private RetryHandler $retryHandler,
-        private FailureHandler $failureHandler,
+        private RetryHandlerInterface $retryHandler = new NullRetryHandler(),
+        private FailureHandlerInterface $failureHandler = new NullFailureHandler(),
     ) {
     }
 
@@ -52,9 +56,7 @@ final readonly class Consumer
                     $this->failureHandler->failure(
                         envelope: $envelope,
                         exception: $failedException,
-                        channel: $this->channel,
-                        originalExchange: $amqpEnvelope->getExchangeName() ?? '',
-                        originalRoutingKey: $amqpEnvelope->getRoutingKey()
+                        channel: $this->channel
                     );
                     $queue->getQueue()->ack($deliveryTag);
 
@@ -64,18 +66,14 @@ final readonly class Consumer
                 $this->retryHandler->retry(
                     envelope: $envelope,
                     exception: $exception,
-                    channel: $this->channel,
-                    originalExchange: $amqpEnvelope->getExchangeName() ?? '',
-                    originalRoutingKey: $amqpEnvelope->getRoutingKey()
+                    channel: $this->channel
                 );
                 $queue->getQueue()->ack($deliveryTag);
             } catch (FailedException $exception) {
                 $this->failureHandler->failure(
                     envelope: $envelope,
                     exception: $exception,
-                    channel: $this->channel,
-                    originalExchange: $amqpEnvelope->getExchangeName() ?? '',
-                    originalRoutingKey: $amqpEnvelope->getRoutingKey()
+                    channel: $this->channel
                 );
                 $queue->getQueue()->ack($deliveryTag);
             } catch (\Throwable $exception) {
