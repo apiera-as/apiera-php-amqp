@@ -1,0 +1,52 @@
+{
+    "name": "apiera/amqp",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Apiera\\Amqp\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "fredrik-tveraaen",
+            "email": "fredrik.tveraaen@apiera.io"
+        }
+    ],
+    "require": {
+        "ext-amqp": "*",
+        "php": "^8.3"
+    },
+    "minimum-stability": "stable",
+    "require-dev": {
+        "apiera/php-standards": "^1.0",
+        "phpunit/phpunit": "^12.0",
+        "dg/bypass-finals": "^1.9"
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true,
+            "phpstan/extension-installer": true
+        }
+    },
+    "scripts": {
+        "test": [
+            "@test:unit"
+        ],
+        "test:unit": "phpunit --testsuite=Unit",
+        "test:coverage": "phpunit --coverage-html coverage",
+        "cs:check": "phpcs --standard=phpcs.xml",
+        "cs:fix": "phpcbf --standard=phpcs.xml",
+        "static:analyse": "phpstan analyse --ansi -c vendor/apiera/php-standards/phpstan/phpstan.neon src/",
+        "check": [
+            "@cs:check",
+            "@static:analyse",
+            "@test:unit"
+        ],
+        "pre-commit": [
+            "@cs:check",
+            "@static:analyse",
+            "@test:unit"
+        ]
+    }
+}
