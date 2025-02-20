@@ -15,8 +15,8 @@ use Apiera\Amqp\Queue;
 final readonly class DeadLetterRetryHandler implements RetryHandlerInterface
 {
     public function __construct(
-        private ?Exchange $retryExchange = null,
-        private ?Queue $retryQueue = null,
+        private ?Exchange $deadLetterExchange = null,
+        private ?Queue $deadLetterQueue = null,
     ) {
     }
 
@@ -31,16 +31,16 @@ final readonly class DeadLetterRetryHandler implements RetryHandlerInterface
     {
         $delay = $this->calculateDelay($exception->getRetryAfter());
 
-        $retryExchange = $this->retryExchange ?? new Exchange(
+        $deadLetterExchange = $this->deadLetterExchange ?? new Exchange(
             channel: $channel,
             type: ExchangeTypeEnum::DIRECT,
             name: 'retry',
             flags: []
         );
 
-        $retryQueueName = sprintf('retry_%d', $delay);
+        $retryQueueName = sprintf('%s_%d', $deadLetterExchange->getName(), $delay);
 
-        $retryQueue = $this->retryQueue ?? new Queue(
+        $deadLetterQueue = $this->deadLetterQueue ?? new Queue(
             channel: $channel,
             name: $retryQueueName,
             flags: [],
@@ -52,9 +52,15 @@ final readonly class DeadLetterRetryHandler implements RetryHandlerInterface
             ]
         );
 
-        $retryExchange->declare();
-        $retryQueue->declare();
-        $retryQueue->bind($retryExchange, $retryQueueName);
+        if (!$deadLetterExchange->isDeclared()) {
+            $deadLetterExchange->declare();
+        }
+
+        if (!$deadLetterQueue->isDeclared()) {
+            $deadLetterQueue->declare();
+        }
+
+        $deadLetterQueue->bind($deadLetterExchange, $retryQueueName);
 
         $retryEnvelope = new MessageEnvelope(
             $envelope->getMessage(),
@@ -70,7 +76,7 @@ final readonly class DeadLetterRetryHandler implements RetryHandlerInterface
             ]
         );
 
-        $retryExchange->publish($retryEnvelope, $retryQueueName);
+        $deadLetterExchange->publish($retryEnvelope, $retryQueueName);
     }
 
     private function calculateDelay(?\DateTimeInterface $retryAfter): int

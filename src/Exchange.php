@@ -73,6 +73,11 @@ final class Exchange
         return $this->name;
     }
 
+    public function isDeclared(): bool
+    {
+        return $this->exchange !== null;
+    }
+
     public function getExchange(): \AMQPExchange
     {
         if ($this->exchange === null) {

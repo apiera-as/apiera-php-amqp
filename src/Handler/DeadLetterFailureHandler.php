@@ -15,8 +15,8 @@ use Apiera\Amqp\Queue;
 final readonly class DeadLetterFailureHandler implements FailureHandlerInterface
 {
     public function __construct(
-        private ?Exchange $failureExchange = null,
-        private ?Queue $failureQueue = null,
+        private ?Exchange $deadLetterExchange = null,
+        private ?Queue $deadLetterQueue = null,
     ) {
     }
 
@@ -29,27 +29,31 @@ final readonly class DeadLetterFailureHandler implements FailureHandlerInterface
      */
     public function failure(MessageEnvelope $envelope, FailedException $exception, Channel $channel): void
     {
-        $failedQueueName = 'failed';
-
-        $deadLetterExchange = $this->failureExchange ?? new Exchange(
+        $deadLetterExchange = $this->deadLetterExchange ?? new Exchange(
             channel: $channel,
             type: ExchangeTypeEnum::DIRECT,
             name: 'failed',
             flags: []
         );
 
-        $deadLetterQueue = $this->failureQueue ?? new Queue(
+        $deadLetterQueue = $this->deadLetterQueue ?? new Queue(
             channel: $channel,
-            name: $failedQueueName,
+            name: $deadLetterExchange->getName(),
             flags: [],
             arguments: [
                 'x-queue-mode' => 'lazy',
             ]
         );
 
-        $deadLetterExchange->declare();
-        $deadLetterQueue->declare();
-        $deadLetterQueue->bind($deadLetterExchange, $failedQueueName);
+        if (!$deadLetterExchange->isDeclared()) {
+            $deadLetterExchange->declare();
+        }
+
+        if (!$deadLetterQueue->isDeclared()) {
+            $deadLetterQueue->declare();
+        }
+
+        $deadLetterQueue->bind($deadLetterExchange, $deadLetterExchange->getName());
 
         $failureEnvelope = new MessageEnvelope(
             $envelope->getMessage(),
@@ -63,6 +67,6 @@ final readonly class DeadLetterFailureHandler implements FailureHandlerInterface
             ]
         );
 
-        $deadLetterExchange->publish($failureEnvelope, $failedQueueName);
+        $deadLetterExchange->publish($failureEnvelope, $deadLetterExchange->getName());
     }
 }

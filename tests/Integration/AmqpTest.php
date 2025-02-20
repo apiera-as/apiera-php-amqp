@@ -112,8 +112,8 @@ final class AmqpTest extends TestCase
     protected function setUp(): void
     {
         $configuration = new Configuration(
-            host: 'localhost',
-            port: 5673,
+            host: 'rabbitmq',
+            port: 5672,
             login: 'test',
             password: 'test',
             vhost: 'test',
@@ -146,6 +146,12 @@ final class AmqpTest extends TestCase
             if ($this->queue->isDeclared()) {
                 $this->queue->getQueue()->delete();
             }
+
+            if ($this->exchange->isDeclared()) {
+                $this->exchange->getExchange()->delete();
+            }
+
+            $this->channel->close();
 
             if ($this->connection->isConnected()) {
                 $this->connection->disconnect();
