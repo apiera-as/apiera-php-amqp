@@ -79,18 +79,6 @@ final readonly class Consumer
                         channel: $this->channel
                     );
                     $queue->getQueue()->ack($deliveryTag);
-                } catch (\Throwable $exception) {
-                    $failedException = new FailedException(
-                        'Message processing failed',
-                        previous: $exception
-                    );
-
-                    $this->failureHandler->failure(
-                        envelope: $envelope,
-                        exception: $failedException,
-                        channel: $this->channel
-                    );
-                    $queue->getQueue()->ack($deliveryTag);
                 }
             }
         );

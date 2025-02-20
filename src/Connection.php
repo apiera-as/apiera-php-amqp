@@ -39,6 +39,11 @@ final class Connection
         $this->connection = null;
     }
 
+    public function isConnected(): bool
+    {
+        return $this->connection !== null && $this->connection->isConnected();
+    }
+
     public function getConnection(): \AMQPConnection
     {
         if ($this->connection === null) {
@@ -46,10 +51,5 @@ final class Connection
         }
 
         return $this->connection;
-    }
-
-    public function isConnected(): bool
-    {
-        return $this->connection !== null && $this->connection->isConnected();
     }
 }

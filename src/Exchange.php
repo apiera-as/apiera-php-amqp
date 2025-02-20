@@ -72,4 +72,13 @@ final class Exchange
     {
         return $this->name;
     }
+
+    public function getExchange(): \AMQPExchange
+    {
+        if ($this->exchange === null) {
+            throw new \RuntimeException('Exchange is not declared');
+        }
+
+        return $this->exchange;
+    }
 }
